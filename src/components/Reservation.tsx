@@ -1,6 +1,7 @@
-
 import React, { useState } from 'react';
 import { Calendar, Clock, Users, Mail, Phone, CheckCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const Reservation = () => {
   const [formData, setFormData] = useState({
@@ -13,21 +14,82 @@ const Reservation = () => {
     specialRequests: ''
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Reservation submitted:', formData);
-    setIsSubmitted(true);
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setIsSubmitted(false);
-      setFormData({ name: '', email: '', phone: '', date: '', time: '', guests: '2', specialRequests: '' });
-    }, 3000);
+    setIsSubmitting(true);
+
+    try {
+      // Save reservation to Supabase
+      const { data: reservation, error: dbError } = await supabase
+        .from('reservations')
+        .insert([
+          {
+            name: formData.name,
+            email: formData.email,
+            phone: formData.phone || null,
+            date: formData.date,
+            time: formData.time,
+            guests: parseInt(formData.guests),
+            special_requests: formData.specialRequests || null,
+          }
+        ])
+        .select()
+        .single();
+
+      if (dbError) {
+        throw new Error(`Database error: ${dbError.message}`);
+      }
+
+      // Send email notification
+      const { error: emailError } = await supabase.functions.invoke('send-reservation-notification', {
+        body: { reservation: reservation }
+      });
+
+      if (emailError) {
+        console.error('Email notification failed:', emailError);
+        // Don't throw here - reservation was saved successfully
+      }
+
+      console.log('Reservation submitted successfully:', reservation);
+      setIsSubmitted(true);
+      
+      toast({
+        title: "Reservation Submitted!",
+        description: "We'll contact you soon to confirm your reservation.",
+      });
+
+      // Reset form after 5 seconds
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setFormData({ 
+          name: '', 
+          email: '', 
+          phone: '', 
+          date: '', 
+          time: '', 
+          guests: '2', 
+          specialRequests: '' 
+        });
+      }, 5000);
+
+    } catch (error) {
+      console.error('Error submitting reservation:', error);
+      toast({
+        title: "Submission Failed",
+        description: "There was an error submitting your reservation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const timeSlots = [
@@ -73,7 +135,8 @@ const Reservation = () => {
                       value={formData.name}
                       onChange={handleInputChange}
                       required
-                      className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                      disabled={isSubmitting}
+                      className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                       placeholder="Your full name"
                     />
                   </div>
@@ -91,7 +154,8 @@ const Reservation = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         required
-                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                         placeholder="your@email.com"
                       />
                     </div>
@@ -109,7 +173,8 @@ const Reservation = () => {
                         name="phone"
                         value={formData.phone}
                         onChange={handleInputChange}
-                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                         placeholder="Your phone number"
                       />
                     </div>
@@ -127,7 +192,8 @@ const Reservation = () => {
                         value={formData.guests}
                         onChange={handleInputChange}
                         required
-                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none"
+                        disabled={isSubmitting}
+                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none disabled:opacity-50"
                       >
                         {guestOptions.map(num => (
                           <option key={num} value={num}>
@@ -152,8 +218,9 @@ const Reservation = () => {
                         value={formData.date}
                         onChange={handleInputChange}
                         required
+                        disabled={isSubmitting}
                         min={new Date().toISOString().split('T')[0]}
-                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                       />
                     </div>
                   </div>
@@ -170,7 +237,8 @@ const Reservation = () => {
                         value={formData.time}
                         onChange={handleInputChange}
                         required
-                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none"
+                        disabled={isSubmitting}
+                        className="w-full pl-10 pr-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none disabled:opacity-50"
                       >
                         <option value="">Select a time</option>
                         {timeSlots.map(time => (
@@ -191,16 +259,18 @@ const Reservation = () => {
                     rows={4}
                     value={formData.specialRequests}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-3 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                     placeholder="Any special dietary requirements, celebrations, or seating preferences..."
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-4 rounded-md font-medium transition-colors duration-200 text-lg"
+                  disabled={isSubmitting}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-4 rounded-md font-medium transition-colors duration-200 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Submit Reservation Request
+                  {isSubmitting ? 'Submitting...' : 'Submit Reservation Request'}
                 </button>
 
                 <p className="text-sm text-muted-foreground text-center">
