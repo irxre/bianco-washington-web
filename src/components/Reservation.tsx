@@ -1,9 +1,11 @@
+
 import React, { useState } from 'react';
 import { Calendar, Clock, Users, Mail, Phone, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { Reservation, ReservationInsert } from '@/types/reservation';
 
-const Reservation = () => {
+const ReservationForm = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -27,20 +29,20 @@ const Reservation = () => {
     setIsSubmitting(true);
 
     try {
-      // Save reservation to Supabase
-      const { data: reservation, error: dbError } = await supabase
+      const reservationData: ReservationInsert = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone || undefined,
+        date: formData.date,
+        time: formData.time,
+        guests: parseInt(formData.guests),
+        special_requests: formData.specialRequests || undefined,
+      };
+
+      // Save reservation to Supabase using type assertion
+      const { data: reservation, error: dbError } = await (supabase as any)
         .from('reservations')
-        .insert([
-          {
-            name: formData.name,
-            email: formData.email,
-            phone: formData.phone || null,
-            date: formData.date,
-            time: formData.time,
-            guests: parseInt(formData.guests),
-            special_requests: formData.specialRequests || null,
-          }
-        ])
+        .insert([reservationData])
         .select()
         .single();
 
@@ -297,4 +299,4 @@ const Reservation = () => {
   );
 };
 
-export default Reservation;
+export default ReservationForm;
