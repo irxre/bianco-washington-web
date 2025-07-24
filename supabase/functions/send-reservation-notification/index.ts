@@ -1,7 +1,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { Resend } from "npm:resend@2.0.0"
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+const resend = new Resend(Deno.env.get('RESEND_API_KEY'))
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,44 +16,74 @@ serve(async (req) => {
 
   try {
     const { reservation } = await req.json()
+    console.log('Received reservation:', reservation)
 
-    if (!RESEND_API_KEY) {
+    if (!Deno.env.get('RESEND_API_KEY')) {
       throw new Error('RESEND_API_KEY is not set')
     }
 
     const emailHtml = `
-      <h2>New Reservation Request - Bianco Washington</h2>
-      <p><strong>Name:</strong> ${reservation.name}</p>
-      <p><strong>Email:</strong> ${reservation.email}</p>
-      <p><strong>Phone:</strong> ${reservation.phone || 'Not provided'}</p>
-      <p><strong>Date:</strong> ${reservation.date}</p>
-      <p><strong>Time:</strong> ${reservation.time}</p>
-      <p><strong>Guests:</strong> ${reservation.guests}</p>
-      <p><strong>Special Requests:</strong> ${reservation.special_requests || 'None'}</p>
-      <p><strong>Submitted:</strong> ${new Date().toLocaleString()}</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333; border-bottom: 2px solid #8B5A3C; padding-bottom: 10px;">New Reservation Request - Bianco Washington</h2>
+        
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #8B5A3C; margin-top: 0;">Reservation Details</h3>
+          
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; width: 150px;">Name:</td>
+              <td style="padding: 8px 0;">${reservation.name}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold;">Email:</td>
+              <td style="padding: 8px 0;">${reservation.email}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold;">Phone:</td>
+              <td style="padding: 8px 0;">${reservation.phone || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold;">Date:</td>
+              <td style="padding: 8px 0;">${reservation.date}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold;">Time:</td>
+              <td style="padding: 8px 0;">${reservation.time}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold;">Guests:</td>
+              <td style="padding: 8px 0;">${reservation.guests}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold;">Special Requests:</td>
+              <td style="padding: 8px 0;">${reservation.special_requests || 'None'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold;">Submitted:</td>
+              <td style="padding: 8px 0;">${new Date().toLocaleString()}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This reservation request was submitted through the Bianco Washington website.
+        </p>
+      </div>
     `
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: 'Bianco Reservations <noreply@yourdomain.com>',
-        to: ['irlind.reshiti@gmail.com'],
-        subject: `New Reservation Request - ${reservation.name}`,
-        html: emailHtml,
-      }),
+    console.log('Attempting to send email...')
+
+    const emailResponse = await resend.emails.send({
+      from: 'Bianco Restaurant <onboarding@resend.dev>',
+      to: ['irlind.reshiti@gmail.com'],
+      subject: `New Reservation Request - ${reservation.name} for ${reservation.date}`,
+      html: emailHtml,
     })
 
-    if (!res.ok) {
-      const error = await res.text()
-      throw new Error(`Failed to send email: ${error}`)
-    }
+    console.log('Email sent successfully:', emailResponse)
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ success: true, emailId: emailResponse.data?.id }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -61,7 +92,10 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error sending notification:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: 'Failed to send email notification'
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
